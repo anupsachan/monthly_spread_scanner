@@ -64,8 +64,8 @@ if st.button('🚀 Run Scanner Now'):
         
         # Display the styled dataframe
         # .style.applymap() allows us to color the "RED" and "Setup" cells
-        styled_df = matrix_df.style.applymap(style_cells)
-        
+        # .map() is the modern replacement for .applymap() in the Styler object
+        styled_df = matrix_df.style.map(style_cells)        
         st.dataframe(styled_df, use_container_width=True)
         st.success("Scan Complete! Green cells indicate high-probability spread setups.")
 
