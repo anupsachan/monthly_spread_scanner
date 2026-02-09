@@ -21,14 +21,14 @@ def load_monthly_data(ticker, months):
     df = yf.Ticker(ticker).history(period=f"{months}mo", interval="1mo", auto_adjust=False)
     df = df.dropna()
     
-    # Remove timezone and format date to 'Jan 2025'
+    # Remove timezone and format date to 'Jan 2025' for cleaner display
     df.index = df.index.tz_localize(None)
     df["Month"] = df.index.strftime('%b %Y') 
     
     return df.reset_index(drop=True)
 
 def evaluate_rules(prev_row, curr_row):
-    # Cycle through trading rules defined in rules.py
+    # Cycles through Rule 1 and Rule 2 defined in rules.py
     for rule in RULES:
         result = rule(prev_row, curr_row)
         if result:
@@ -52,11 +52,14 @@ def run_backtest():
     # 1. Create the DataFrame
     matrix_df = pd.DataFrame(matrix).T
     
-    # 2. Reset index so 'Ticker' names are standard column values
+    # 2. Reset index to make 'Ticker' a normal column (prevents Index-based Arrow errors)
     matrix_df = matrix_df.reset_index().rename(columns={'index': 'Ticker'})
     
-    # 3. Force all data to basic Python objects to bypass Arrow 'LargeUtf8' error
-    return matrix_df.astype(object)
+    # 3. FORCE EVERYTHING TO BASIC OBJECTS
+    # This is the strongest safeguard against specialized Arrow types
+    matrix_df = matrix_df.astype(str)
+    
+    return matrix_df
 
 # --- 4. Streamlit UI ---
 st.title("📈 Monthly Credit Spread Scanner")
@@ -66,20 +69,21 @@ st.markdown("Automated setup identification for Call and Put spreads.")
 def style_cells(val):
     if val == "RED":
         return 'background-color: #ff4b4b; color: white; font-weight: bold'
-    if val != "RED" and val != "Ticker": # Target only the setup results
+    if val != "RED" and val != "Ticker": 
         return 'background-color: #09ab3b; color: white; font-weight: bold'
     return ''
 
 if st.button('🚀 Run Scanner Now'):
-    with st.spinner('Fetching historical data from Yahoo Finance...'):
+    with st.spinner('Fetching historical data...'):
         # Run the backtest logic
         matrix_df = run_backtest()
         
-        # .map() handles element-wise styling in modern Pandas
-        styled_df = matrix_df.style.map(style_cells)        
+        # Apply the styling
+        styled_df = matrix_df.style.map(style_cells)
         
-        # USE st.table() TO BYPASS THE ARROW HANDSHAKE ERROR
-        st.table(styled_df)
+        # FINAL SAFEGUARD: Use st.table instead of st.dataframe
+        # st.table generates a static HTML table that bypasses Arrow serialization entirely
+        st.table(styled_df) 
         st.success("Scan Complete!")
 
 # --- 5. User Guide ---
