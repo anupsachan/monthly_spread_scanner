@@ -21,14 +21,14 @@ def load_monthly_data(ticker, months):
     df = yf.Ticker(ticker).history(period=f"{months}mo", interval="1mo", auto_adjust=False)
     df = df.dropna()
     
-    # Remove timezone and format date to 'Jan 2025' for cleaner mobile display
+    # Remove timezone and format date to 'Jan 2025'
     df.index = df.index.tz_localize(None)
     df["Month"] = df.index.strftime('%b %Y') 
     
     return df.reset_index(drop=True)
 
 def evaluate_rules(prev_row, curr_row):
-    # Cycles through Rule 1 and Rule 2 defined in rules.py
+    # Cycle through trading rules defined in rules.py
     for rule in RULES:
         result = rule(prev_row, curr_row)
         if result:
@@ -40,7 +40,6 @@ def run_backtest():
     for ticker in CONFIG["tickers"]:
         df = load_monthly_data(ticker, CONFIG["history_buffer"])
         results = {}
-        # start calculation based on config
         start = len(df) - CONFIG["months_to_test"]
         for i in range(start, len(df)):
             if i <= 0: continue
@@ -53,15 +52,12 @@ def run_backtest():
     # 1. Create the DataFrame
     matrix_df = pd.DataFrame(matrix).T
     
-    # 2. Reset the index so Tickers become a standard column
+    # 2. Reset index so 'Ticker' names are standard column values
     matrix_df = matrix_df.reset_index().rename(columns={'index': 'Ticker'})
     
-    # 3. Force the entire container to standard Python objects
-    # This prevents 'LargeUtf8' by ensuring no high-perf Arrow types remain
-    matrix_df = matrix_df.astype(object)
-    
-    return matrix_df
-    
+    # 3. Force all data to basic Python objects to bypass Arrow 'LargeUtf8' error
+    return matrix_df.astype(object)
+
 # --- 4. Streamlit UI ---
 st.title("📈 Monthly Credit Spread Scanner")
 st.markdown("Automated setup identification for Call and Put spreads.")
@@ -70,19 +66,21 @@ st.markdown("Automated setup identification for Call and Put spreads.")
 def style_cells(val):
     if val == "RED":
         return 'background-color: #ff4b4b; color: white; font-weight: bold'
-    return 'background-color: #09ab3b; color: white; font-weight: bold'
+    if val != "RED" and val != "Ticker": # Target only the setup results
+        return 'background-color: #09ab3b; color: white; font-weight: bold'
+    return ''
 
 if st.button('🚀 Run Scanner Now'):
     with st.spinner('Fetching historical data from Yahoo Finance...'):
         # Run the backtest logic
         matrix_df = run_backtest()
         
-        # .map() is used for element-wise styling in modern Pandas
+        # .map() handles element-wise styling in modern Pandas
         styled_df = matrix_df.style.map(style_cells)        
         
-        # Display the interactive dataframe
-        st.dataframe(styled_df, use_container_width=True)
-        st.success("Scan Complete! Green cells indicate potential spread setups.")
+        # USE st.table() TO BYPASS THE ARROW HANDSHAKE ERROR
+        st.table(styled_df)
+        st.success("Scan Complete!")
 
 # --- 5. User Guide ---
 with st.expander("ℹ️ How to read this chart"):
