@@ -56,7 +56,7 @@ def run_backtest():
     return matrix_df.astype(str)
 
 # --- 4. Streamlit UI ---
-st.title("📈 Monthly Credit Spread Scanner")
+st.title("📈 Monthly Credit Spread Scanner_")
 st.markdown("Automated setup identification for Call and Put spreads.")
 
 # Styling function for the web table colors
