@@ -10,7 +10,7 @@ tickers:
   - AVGO
   - COST
 
-months_to_test: 12
+months_to_test: 2
 history_buffer: 24
 
 ui:
