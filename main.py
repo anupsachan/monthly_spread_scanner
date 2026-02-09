@@ -4,92 +4,64 @@ import yaml
 import streamlit as st
 from rules import RULES
 
-# --- 1. Page Configuration (Optimized for Mobile) ---
-st.set_page_config(
-    page_title="Monthly Spread Scanner",
-    page_icon="📈",
-    layout="wide"
-)
+st.set_page_config(page_title="Monthly Spread Scanner", page_icon="📈", layout="wide")
 
-# --- 2. Load Config ---
 with open("config.yaml", "r") as f:
     CONFIG = yaml.safe_load(f)
 
-# --- 3. Data Logic ---
 def load_monthly_data(ticker, months):
-    # Fetch data from Yahoo Finance
     df = yf.Ticker(ticker).history(period=f"{months}mo", interval="1mo", auto_adjust=False)
     df = df.dropna()
-    
-    # Remove timezone and format date to 'Jan 2025' for cleaner display
     df.index = df.index.tz_localize(None)
     df["Month"] = df.index.strftime('%b %Y') 
-    
     return df.reset_index(drop=True)
 
 def evaluate_rules(prev_row, curr_row):
-    # Cycles through Rule 1 and Rule 2 defined in rules.py
     for rule in RULES:
         result = rule(prev_row, curr_row)
-        if result:
-            return result
+        if result: return result
     return "RED"
 
-def run_backtest():
-    matrix = {}
+def run_backtest_to_list():
+    # We build a list of dicts instead of a complex DataFrame
+    final_data = []
     for ticker in CONFIG["tickers"]:
         df = load_monthly_data(ticker, CONFIG["history_buffer"])
-        results = {}
+        row_data = {"Ticker": ticker}
         start = len(df) - CONFIG["months_to_test"]
         for i in range(start, len(df)):
             if i <= 0: continue
-            prev_row = df.iloc[i - 1]
-            curr_row = df.iloc[i]
-            month = curr_row["Month"]
-            results[month] = evaluate_rules(prev_row, curr_row)
-        matrix[ticker] = results
-    
-    # 1. Create the DataFrame
-    matrix_df = pd.DataFrame(matrix).T
-    
-    # 2. Reset index to make 'Ticker' a normal column (prevents Index-based Arrow errors)
-    matrix_df = matrix_df.reset_index().rename(columns={'index': 'Ticker'})
-    
-    # 3. FORCE EVERYTHING TO BASIC OBJECTS
-    # This is the strongest safeguard against specialized Arrow types
-    matrix_df = matrix_df.astype(str)
-    
-    return matrix_df
+            month = df.iloc[i]["Month"]
+            status = evaluate_rules(df.iloc[i-1], df.iloc[i])
+            row_data[month] = status
+        final_data.append(row_data)
+    return final_data
 
-# --- 4. Streamlit UI ---
 st.title("📈 Monthly Credit Spread Scanner")
-st.markdown("Automated setup identification for Call and Put spreads.")
-
-# Styling function for the web table colors
-def style_cells(val):
-    if val == "RED":
-        return 'background-color: #ff4b4b; color: white; font-weight: bold'
-    if val != "RED" and val != "Ticker": 
-        return 'background-color: #09ab3b; color: white; font-weight: bold'
-    return ''
 
 if st.button('🚀 Run Scanner Now'):
     with st.spinner('Fetching historical data...'):
-        # Run the backtest logic
-        matrix_df = run_backtest()
+        results = run_backtest_to_list()
         
-        # Apply the styling
-        styled_df = matrix_df.style.map(style_cells)
-        
-        # FINAL SAFEGUARD: Use st.table instead of st.dataframe
-        # st.table generates a static HTML table that bypasses Arrow serialization entirely
-        st.table(styled_df) 
-        st.success("Scan Complete!")
-
-# --- 5. User Guide ---
-with st.expander("ℹ️ How to read this chart"):
-    st.write("""
-    - **RED**: No setup found for this month.
-    - **R1-CALL**: Bullish setup (Rule 1).
-    - **R2-PUT**: Bearish setup (Rule 2).
-    """)
+        if results:
+            # OUT OF THE BOX: Build the table using standard Markdown 
+            # This bypasses the Arrow/LargeUtf8 error completely.
+            headers = results[0].keys()
+            header_row = "| " + " | ".join(headers) + " |"
+            separator = "| " + " | ".join(["---"] * len(headers)) + " |"
+            
+            table_rows = []
+            for row in results:
+                formatted_row = []
+                for key, val in row.items():
+                    if val == "RED":
+                        formatted_row.append(f"🔴 {val}")
+                    elif key == "Ticker":
+                        formatted_row.append(f"**{val}**")
+                    else:
+                        formatted_row.append(f"🟢 {val}")
+                table_rows.append("| " + " | ".join(formatted_row) + " |")
+            
+            full_markdown_table = f"{header_row}\n{separator}\n" + "\n".join(table_rows)
+            st.markdown(full_markdown_table)
+            st.success("Scan Complete!")
