@@ -4,7 +4,7 @@ import yaml
 import streamlit as st
 from rules import RULES
 
-# --- 1. Page Configuration (Best for Mobile) ---
+# --- 1. Page Configuration (Optimized for Mobile) ---
 st.set_page_config(
     page_title="Monthly Spread Scanner",
     page_icon="📈",
@@ -15,17 +15,20 @@ st.set_page_config(
 with open("config.yaml", "r") as f:
     CONFIG = yaml.safe_load(f)
 
-# --- 3. Data Logic (Unchanged from original) ---
+# --- 3. Data Logic ---
 def load_monthly_data(ticker, months):
-    # auto_adjust=False is critical for getting standard Open/Close values
+    # Fetch data from Yahoo Finance
     df = yf.Ticker(ticker).history(period=f"{months}mo", interval="1mo", auto_adjust=False)
     df = df.dropna()
-    # Remove timezone for clean processing
+    
+    # Remove timezone and format date to 'Jan 2025' for cleaner mobile display
     df.index = df.index.tz_localize(None)
-    df["Month"] = df.index.to_period("M").astype(str)
+    df["Month"] = df.index.strftime('%b %Y') 
+    
     return df.reset_index(drop=True)
 
 def evaluate_rules(prev_row, curr_row):
+    # Cycles through Rule 1 and Rule 2 defined in rules.py
     for rule in RULES:
         result = rule(prev_row, curr_row)
         if result:
@@ -45,13 +48,18 @@ def run_backtest():
             month = curr_row["Month"]
             results[month] = evaluate_rules(prev_row, curr_row)
         matrix[ticker] = results
-    return pd.DataFrame(matrix).T
+    
+    # Convert to DataFrame and transpose
+    matrix_df = pd.DataFrame(matrix).T
+    
+    # FIX: Convert to standard string to prevent the 'LargeUtf8' browser error
+    return matrix_df.astype(str)
 
-# --- 4. Streamlit UI (The "Web" Part) ---
+# --- 4. Streamlit UI ---
 st.title("📈 Monthly Credit Spread Scanner")
 st.markdown("Automated setup identification for Call and Put spreads.")
 
-# Styling function for the web table
+# Styling function for the web table colors
 def style_cells(val):
     if val == "RED":
         return 'background-color: #ff4b4b; color: white; font-weight: bold'
@@ -59,20 +67,20 @@ def style_cells(val):
 
 if st.button('🚀 Run Scanner Now'):
     with st.spinner('Fetching historical data from Yahoo Finance...'):
-        # Run the actual logic
+        # Run the backtest logic
         matrix_df = run_backtest()
         
-        # Display the styled dataframe
-        # .style.applymap() allows us to color the "RED" and "Setup" cells
-        # .map() is the modern replacement for .applymap() in the Styler object
+        # .map() is used for element-wise styling in modern Pandas
         styled_df = matrix_df.style.map(style_cells)        
+        
+        # Display the interactive dataframe
         st.dataframe(styled_df, use_container_width=True)
-        st.success("Scan Complete! Green cells indicate high-probability spread setups.")
+        st.success("Scan Complete! Green cells indicate potential spread setups.")
 
 # --- 5. User Guide ---
 with st.expander("ℹ️ How to read this chart"):
     st.write("""
     - **RED**: No setup found for this month.
-    - **R1-CALL**: Bullish setup identified based on Rule 1.
-    - **R2-PUT**: Bearish setup identified based on Rule 2.
+    - **R1-CALL**: Bullish setup (Rule 1).
+    - **R2-PUT**: Bearish setup (Rule 2).
     """)
