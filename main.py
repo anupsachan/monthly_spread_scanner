@@ -1,23 +1,29 @@
 import yfinance as yf
 import pandas as pd
 import yaml
-from rich.console import Console
-from rich.table import Table
-from rich.text import Text
+import streamlit as st
 from rules import RULES
 
-console = Console()
+# --- 1. Page Configuration (Best for Mobile) ---
+st.set_page_config(
+    page_title="Monthly Spread Scanner",
+    page_icon="📈",
+    layout="wide"
+)
 
+# --- 2. Load Config ---
 with open("config.yaml", "r") as f:
     CONFIG = yaml.safe_load(f)
 
-
+# --- 3. Data Logic (Unchanged from original) ---
 def load_monthly_data(ticker, months):
+    # auto_adjust=False is critical for getting standard Open/Close values
     df = yf.Ticker(ticker).history(period=f"{months}mo", interval="1mo", auto_adjust=False)
     df = df.dropna()
+    # Remove timezone for clean processing
+    df.index = df.index.tz_localize(None)
     df["Month"] = df.index.to_period("M").astype(str)
     return df.reset_index(drop=True)
-
 
 def evaluate_rules(prev_row, curr_row):
     for rule in RULES:
@@ -26,7 +32,6 @@ def evaluate_rules(prev_row, curr_row):
             return result
     return "RED"
 
-
 def run_backtest():
     matrix = {}
     for ticker in CONFIG["tickers"]:
@@ -34,8 +39,7 @@ def run_backtest():
         results = {}
         start = len(df) - CONFIG["months_to_test"]
         for i in range(start, len(df)):
-            if i <= 0:
-                continue
+            if i <= 0: continue
             prev_row = df.iloc[i - 1]
             curr_row = df.iloc[i]
             month = curr_row["Month"]
@@ -43,28 +47,32 @@ def run_backtest():
         matrix[ticker] = results
     return pd.DataFrame(matrix).T
 
+# --- 4. Streamlit UI (The "Web" Part) ---
+st.title("📈 Monthly Credit Spread Scanner")
+st.markdown("Automated setup identification for Call and Put spreads.")
 
-def render(matrix):
-    table = Table(title="Monthly Credit Spread Setup Readiness", show_lines=True)
-    table.add_column("Ticker", style="bold", justify="center")
-    for m in matrix.columns:
-        table.add_column(m, justify="center")
-    for ticker, row in matrix.iterrows():
-        cells = []
-        for val in row:
-            if val == "RED":
-                cells.append(Text("RED", style=CONFIG["ui"]["red_style"]))
-            else:
-                cells.append(Text(val, style=CONFIG["ui"]["green_style"]))
-        table.add_row(ticker, *cells)
-    console.print(table)
+# Styling function for the web table
+def style_cells(val):
+    if val == "RED":
+        return 'background-color: #ff4b4b; color: white; font-weight: bold'
+    return 'background-color: #09ab3b; color: white; font-weight: bold'
 
+if st.button('🚀 Run Scanner Now'):
+    with st.spinner('Fetching historical data from Yahoo Finance...'):
+        # Run the actual logic
+        matrix_df = run_backtest()
+        
+        # Display the styled dataframe
+        # .style.applymap() allows us to color the "RED" and "Setup" cells
+        styled_df = matrix_df.style.applymap(style_cells)
+        
+        st.dataframe(styled_df, use_container_width=True)
+        st.success("Scan Complete! Green cells indicate high-probability spread setups.")
 
-def main():
-    console.print("\n[cyan]Running monthly spread setup scanner...[/cyan]\n")
-    matrix = run_backtest()
-    render(matrix)
-
-
-if __name__ == "__main__":
-    main()
+# --- 5. User Guide ---
+with st.expander("ℹ️ How to read this chart"):
+    st.write("""
+    - **RED**: No setup found for this month.
+    - **R1-CALL**: Bullish setup identified based on Rule 1.
+    - **R2-PUT**: Bearish setup identified based on Rule 2.
+    """)
