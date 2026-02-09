@@ -1,0 +1,18 @@
+tickers:
+  - AAPL
+  - MSFT
+  - NVDA
+  - AMZN
+  - GOOGL
+  - META
+  - TSLA
+  - JPM
+  - AVGO
+  - COST
+
+months_to_test: 12
+history_buffer: 24
+
+ui:
+  green_style: "bold green"
+  red_style: "bold red"
