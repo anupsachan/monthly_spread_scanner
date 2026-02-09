@@ -40,6 +40,7 @@ def run_backtest():
     for ticker in CONFIG["tickers"]:
         df = load_monthly_data(ticker, CONFIG["history_buffer"])
         results = {}
+        # start calculation based on config
         start = len(df) - CONFIG["months_to_test"]
         for i in range(start, len(df)):
             if i <= 0: continue
@@ -60,6 +61,7 @@ def run_backtest():
     matrix_df = matrix_df.astype(object)
     
     return matrix_df
+    
 # --- 4. Streamlit UI ---
 st.title("📈 Monthly Credit Spread Scanner")
 st.markdown("Automated setup identification for Call and Put spreads.")
