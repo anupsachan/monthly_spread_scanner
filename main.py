@@ -49,14 +49,19 @@ def run_backtest():
             results[month] = evaluate_rules(prev_row, curr_row)
         matrix[ticker] = results
     
-    # Convert to DataFrame and transpose
+    # 1. Create the DataFrame
     matrix_df = pd.DataFrame(matrix).T
     
-    # FIX: Convert to standard string to prevent the 'LargeUtf8' browser error
-    return matrix_df.astype(str)
-
+    # 2. Reset the index so Tickers become a standard column
+    matrix_df = matrix_df.reset_index().rename(columns={'index': 'Ticker'})
+    
+    # 3. Force the entire container to standard Python objects
+    # This prevents 'LargeUtf8' by ensuring no high-perf Arrow types remain
+    matrix_df = matrix_df.astype(object)
+    
+    return matrix_df
 # --- 4. Streamlit UI ---
-st.title("📈 Monthly Credit Spread Scanner_")
+st.title("📈 Monthly Credit Spread Scanner")
 st.markdown("Automated setup identification for Call and Put spreads.")
 
 # Styling function for the web table colors
