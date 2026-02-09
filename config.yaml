@@ -1,18 +1,7 @@
-tickers:
-  - AAPL
-  - MSFT
-  - NVDA
-  - AMZN
-  - GOOGL
-  - META
-  - TSLA
-  - JPM
-  - AVGO
-  - COST
-
+tickers: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "AVGO", "COST"]
+history_buffer: 12
 months_to_test: 2
-history_buffer: 24
 
 ui:
-  green_style: "bold green"
-  red_style: "bold red"
+  green_style: "🟢" # You can also use "PASS" or "GREEN"
+  red_style: "🔴"   # You can also use "FAIL" or "RED"
