@@ -1,7 +1,18 @@
-tickers: ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "AVGO", "COST"]
+# Master Ticker List (Top 10)
+tickers: ["META", "TSLA", "NVDA", "MSFT", "GOOGL", "AAPL", "COST", "BABA", "^GSPC", "AMZN"]
+
+# Friendly Name Mapping
+names:
+  "^GSPC": "S&P 500"
+  "BABA": "Alibaba"
+  "NVDA": "Nvidia"
+
+# Global Settings
 history_buffer: 12
 months_to_test: 2
 
+# UI Labels
 ui:
-  green_style: "🟢" # You can also use "PASS" or "GREEN"
-  red_style: "🔴"   # You can also use "FAIL" or "RED"
+  title: "Master Credit Spread Scanner"
+  green_label: "READY"
+  red_label: "RED"

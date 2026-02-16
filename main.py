@@ -1,98 +1,170 @@
+# -*- coding: utf-8 -*-
 import yfinance as yf
 import pandas as pd
 import yaml
 import streamlit as st
+import plotly.graph_objects as go  # Ensure this is imported globally
 from rules import RULES
 
-st.set_page_config(page_title="Master Spread Scanner", page_icon="📈", layout="wide")
-
-# --- 1. Load Config ---
+# --- 1. Load Config & Page Setup ---
 with open("config.yaml", "r") as f:
     CONFIG = yaml.safe_load(f)
 
-# Get styles from config with defaults
-GREEN_STYLE = CONFIG.get("ui", {}).get("green_style", "🟢")
-RED_STYLE = CONFIG.get("ui", {}).get("red_style", "🔴")
+st.set_page_config(page_title="Master Scanner", layout="wide")
+
+# --- 2. HIGH VISIBILITY & PULSE ANIMATION (CSS) ---
+st.markdown("""
+    <style>
+    /* 1. High Visibility Dropdown */
+    div[data-baseweb="select"] {
+        border: 3px solid #09ab3b !important;
+        border-radius: 10px !important;
+        background-color: #f0f2f6 !important;
+    }
+    .stSelectbox label p {
+        color: #09ab3b !important;
+        font-weight: bold !important;
+        font-size: 1.2rem !important;
+    }
+
+    /* 2. Pulse Animation for the Run Button */
+    @keyframes pulse-green {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(9, 171, 59, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(9, 171, 59, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(9, 171, 59, 0); }
+    }
+
+    div.stButton > button {
+        animation: pulse-green 2s infinite;
+        background-color: #09ab3b !important;
+        color: white !important;
+        font-weight: bold !important;
+        border: none !important;
+        width: 100%;
+        height: 3.5em;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 3. Helper Functions ---
+def get_display_name(ticker):
+    return CONFIG.get("names", {}).get(ticker, ticker)
+
+def get_live_price(ticker):
+    try:
+        data = yf.Ticker(ticker).history(period="1d")
+        return f"${data['Close'].iloc[-1]:.2f}"
+    except:
+        return "N/A"
 
 def get_period_label(date, interval):
-    """Standardizes date labels for the multi-view table."""
     if interval == "1d": return date.strftime('%b %d')
-    if interval == "1wk": return f"Wk {date.strftime('%d')}"
-    if interval == "1mo": return date.strftime('%b %y')
-    if interval == "3mo": return f"Q{(date.month-1)//3 + 1}-{date.year % 100}"
+    if interval == "1wk": 
+        w = (date.day - 1) // 7 + 1
+        return f"Week {w}"
+    if interval == "1mo": return date.strftime('%B %Y')
+    if interval == "3mo": 
+        q = (date.month - 1) // 3 + 1
+        return f"Q{q}-{date.year}"
     return date.strftime('%Y-%m-%d')
 
 def load_data(ticker, interval):
-    """Fetches data for a specific timeframe."""
     period = "1y" if interval in ["1d", "1wk"] else "5y"
     df = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
     df = df.dropna()
     df.index = df.index.tz_localize(None)
     return df
 
-def evaluate_rules(prev_row, curr_row):
-    """Runs technical rules from rules.py."""
-    for rule in RULES:
-        result = rule(prev_row, curr_row)
-        if result: return result
-    return "RED"
+# --- 4. Main UI Header ---
+st.title("📊 Master Credit Spread Scanner")
 
-def run_master_scan():
-    """Loops through all intervals for all tickers."""
-    intervals = ["1d", "1wk", "1mo", "3mo"]
-    master_results = []
+st.info("**Market Logic:** This scanner identifies reversals and gaps relative to the previous close.")
+st.markdown("""
+- <span style='color: #ff4b4b; font-weight: bold;'>RED</span>: No setup found.
+- <span style='color: #09ab3b; font-weight: bold;'>GREEN (R1/R2)</span>: Setup identified.
+""", unsafe_allow_html=True)
 
-    for ticker in CONFIG["tickers"]:
-        for inv in intervals:
+# --- 5. Ticker & Timeframe Selectors ---
+col1, col2 = st.columns(2)
+
+with col1:
+    timeframe_choice = st.selectbox(
+        "1. Select Timeframe to Scan:",
+        ["Daily", "Weekly", "Monthly", "Quarterly"],
+        index=2
+    )
+
+with col2:
+    # Use friendly names in the dropdown list
+    selected_ticker = st.selectbox(
+        "2. Select Ticker for Graphic:",
+        CONFIG["tickers"],
+        format_func=get_display_name
+    )
+
+interval_map = {"Daily": "1d", "Weekly": "1wk", "Monthly": "1mo", "Quarterly": "3mo"}
+selected_inv = interval_map[timeframe_choice]
+
+# --- 6. Graphical Representation Widget ---
+if selected_ticker:
+    df_chart = load_data(selected_ticker, selected_inv)
+    if len(df_chart) >= 2:
+        last_2 = df_chart.iloc[-2:]
+        labels = [get_period_label(d, selected_inv) for d in last_2.index]
+        
+        # This is where 'go' is used
+        fig = go.Figure(data=[go.Candlestick(
+            x=labels,
+            open=last_2['Open'], high=last_2['High'],
+            low=last_2['Low'], close=last_2['Close'],
+            increasing_line_color='#09ab3b', decreasing_line_color='#ff4b4b'
+        )])
+        fig.update_layout(
+            title=f"{get_display_name(selected_ticker)} Chart: {labels[0]} vs {labels[1]}",
+            xaxis_rangeslider_visible=False,
+            height=400,
+            template="plotly_white"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+# --- 7. Scanner Execution ---
+if st.button(f'🚀 RUN {timeframe_choice.upper()} SCAN NOW'):
+    with st.spinner('Checking patterns...'):
+        results = []
+        for ticker in CONFIG["tickers"]:
             try:
-                df = load_data(ticker, inv)
-                if len(df) < 2: continue
+                df = load_data(ticker, selected_inv)
+                if len(df) < 3: continue
                 
-                curr_idx = len(df) - 1
-                prev_idx = len(df) - 2
+                name = get_display_name(ticker)
+                price = get_live_price(ticker)
                 
-                label_prev = get_period_label(df.index[prev_idx], inv)
-                label_curr = get_period_label(df.index[curr_idx], inv)
+                res_prev, res_curr = "RED", "RED"
+                for rule in RULES:
+                    if res_prev == "RED": res_prev = rule(df.iloc[-3], df.iloc[-2]) or "RED"
+                    if res_curr == "RED": res_curr = rule(df.iloc[-2], df.iloc[-1]) or "RED"
                 
-                res_prev = evaluate_rules(df.iloc[prev_idx-1], df.iloc[prev_idx])
-                res_curr = evaluate_rules(df.iloc[prev_idx], df.iloc[curr_idx])
-                
-                master_results.append({
-                    "Ticker": ticker,
-                    "Timeframe": inv.replace("1d","Daily").replace("1wk","Weekly").replace("1mo","Monthly").replace("3mo","Quarterly"),
-                    "prev_label": label_prev,
-                    "curr_label": label_curr,
+                results.append({
+                    "Ticker": f"**{name}**<br><small>({price})</small>",
+                    "prev_label": get_period_label(df.index[-2], selected_inv),
+                    "curr_label": get_period_label(df.index[-1], selected_inv),
                     "prev_res": res_prev,
                     "curr_res": res_curr
                 })
-            except Exception:
-                continue
-    return master_results
+            except: continue
 
-st.title("📈 Master Credit Spread Scanner")
-
-if st.button('🚀 Run Full Market Scan'):
-    with st.spinner('Scanning all intervals...'):
-        results = run_master_scan()
-        
         if results:
-            # Markdown Table Construction
-            header = "| Ticker | Timeframe | Previous Period | Current Period |"
-            sep = "| --- | --- | --- | --- |"
-            
+            header = f"| Instrument | Previous ({results[0]['prev_label']}) | Current ({results[0]['curr_label']}) |"
+            sep = "| :--- | :---: | :---: |"
             rows = []
+            
+            green_box = "<div style='background-color:#09ab3b; color:white; padding:8px; border-radius:5px; font-weight:bold; text-align:center;'>{}</div>"
+            red_box = "<div style='background-color:#ff4b4b; color:white; padding:8px; border-radius:5px; font-weight:bold; text-align:center;'>{}</div>"
+            
             for r in results:
-                # Ticker label logic
-                t_cell = f"**{r['Ticker']}**" if r['Timeframe'] == "Daily" else ""
-                
-                # Apply Style from Config
-                p_icon = RED_STYLE if r['prev_res'] == "RED" else GREEN_STYLE
-                c_icon = RED_STYLE if r['curr_res'] == "RED" else GREEN_STYLE
-                
-                p_text = f"{p_icon} {r['prev_res']}"
-                c_text = f"{c_icon} {r['curr_res']}"
-                
-                rows.append(f"| {t_cell} | {r['Timeframe']} | {p_text} <br> <small>{r['prev_label']}</small> | {c_text} <br> <small>{r['curr_label']}</small> |")
+                p_val = red_box.format(r['prev_res']) if r['prev_res'] == "RED" else green_box.format(r['prev_res'])
+                c_val = red_box.format(r['curr_res']) if r['curr_res'] == "RED" else green_box.format(r['curr_res'])
+                rows.append(f"| {r['Ticker']} | {p_val} | {c_val} |")
             
             st.markdown(header + "\n" + sep + "\n" + "\n".join(rows), unsafe_allow_html=True)
             st.success("Scan Complete!")

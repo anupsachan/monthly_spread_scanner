@@ -1,6 +1,6 @@
 yfinance
 pandas
 pyyaml
-rich
 streamlit
+plotly
 altair<5
