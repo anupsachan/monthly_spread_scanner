@@ -1,6 +1,6 @@
+streamlit>=1.31.0
+pandas>=2.0.0
 yfinance
-pandas
 pyyaml
-streamlit
 plotly
 altair<5
